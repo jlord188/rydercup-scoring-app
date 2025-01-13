@@ -2,8 +2,12 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <!-- Viewport meta so mobile devices scale the page correctly -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- Example fonts -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&family=Open+Sans:wght@300;400;600;700;800&display=swap">
+  
   <title>Ryder Cup Live Scoring</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -43,7 +47,10 @@
     let days = [];
     let pointsNeededToWin = 0;
 
+    // We'll store the hole index for each match in this array
     let matchHoleIndices = [];
+
+    // Active day can also be remembered in localStorage
     let activeDayNumber = parseInt(localStorage.getItem('activeDayNumber') || '1', 10);
 
     const socket = io();
@@ -51,6 +58,14 @@
     socket.on('connect', () => {
       console.log('Connected to server');
     });
+
+    // Helper function to set the hole index for a particular match
+    // and also save the entire array to localStorage.
+    function setCurrentHoleIndex(matchIndex, newIndex) {
+      matchHoleIndices[matchIndex] = newIndex;
+      localStorage.setItem('matchHoleIndices', JSON.stringify(matchHoleIndices));
+      renderDayViews(); 
+    }
 
     // initData => { cupName, teams, matches, days, pointsNeededToWin }
     socket.on('initData', (initData) => {
@@ -60,21 +75,42 @@
       days = initData.days;
       pointsNeededToWin = initData.pointsNeededToWin || 0;
 
+      // Sort days
       days.sort((a, b) => a.dayNumber - b.dayNumber);
+
+      // If our saved activeDayNumber is out of range, reset it
       if (activeDayNumber > (days[days.length - 1]?.dayNumber || 1)) {
         activeDayNumber = days[days.length - 1]?.dayNumber || 1;
       }
 
+      // Set cup name in the header
       document.getElementById('cupNameHeader').innerText = cupName + ' Live Scoring';
 
-      // Initialize hole indices
-      matchHoleIndices = matches.map(() => 0);
+      // Load or initialize matchHoleIndices from localStorage
+      const stored = localStorage.getItem('matchHoleIndices');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          // Only apply if length matches number of matches
+          if (Array.isArray(parsed) && parsed.length === matches.length) {
+            matchHoleIndices = parsed;
+          } else {
+            matchHoleIndices = matches.map(() => 0);
+          }
+        } catch (err) {
+          console.error('Error parsing stored matchHoleIndices:', err);
+          matchHoleIndices = matches.map(() => 0);
+        }
+      } else {
+        matchHoleIndices = matches.map(() => 0);
+      }
 
       renderScoreboard();
       renderTabs();
       renderDayViews();
     });
 
+    // When a match is updated (someone clicked A/H/B)
     socket.on('matchDataUpdated', (data) => {
       const { matchIndex, match } = data;
       matches[matchIndex] = match;
@@ -82,6 +118,7 @@
       renderDayViews();
     });
 
+    // Render scoreboard (Team points, winner announcement, etc.)
     function renderScoreboard() {
       let team1Score = 0;
       let team2Score = 0;
@@ -102,7 +139,7 @@
       document.getElementById('team1Score').innerText = team1Score.toString();
       document.getElementById('team2Score').innerText = team2Score.toString();
 
-      document.getElementById('pointsNeededDisplay').innerText = 
+      document.getElementById('pointsNeededDisplay').innerText =
         `Points needed to win: ${pointsNeededToWin}`;
 
       const winnerAnnouncementEl = document.getElementById('winnerAnnouncement');
@@ -117,6 +154,7 @@
       }
     }
 
+    // Render day tabs (Day 1, Day 2, etc.)
     function renderTabs() {
       const dayTabsDiv = document.getElementById('dayTabs');
       dayTabsDiv.innerHTML = '';
@@ -158,7 +196,30 @@
       return dayMatches.every((m) => m.winner !== null);
     }
 
-    // RENDER DAY VIEWS (with updated summary & hole layout)
+    // Summarize how many matches Team A is up, Team B is up, or all square
+    function computeDayUpDownSquare(dayNumber) {
+      const dayMatches = matches.filter((m) => m.dayNumber === dayNumber && !m.winner);
+      let aUp = 0, bUp = 0, allSquare = 0;
+
+      dayMatches.forEach((m) => {
+        if (m.holesUp > 0) {
+          aUp++;
+        } else if (m.holesUp < 0) {
+          bUp++;
+        } else {
+          allSquare++;
+        }
+      });
+
+      return {
+        aUp,
+        bUp,
+        allSquare,
+        totalIncomplete: dayMatches.length
+      };
+    }
+
+    // Render day-by-day matches
     function renderDayViews() {
       const container = document.getElementById('dayViewsContainer');
       container.innerHTML = '';
@@ -176,26 +237,26 @@
         dayView.appendChild(dayHeader);
 
         // Summary of incomplete matches
-        const summaryP = document.createElement('div'); 
+        const summaryDiv = document.createElement('div'); 
         const summary = computeDayUpDownSquare(day.dayNumber);
 
         if (summary.totalIncomplete > 0) {
           const lineA = document.createElement('p');
           lineA.innerText = `${teams[0]?.name || 'Team A'} is up in ${summary.aUp}, down in ${summary.bUp}, all square in ${summary.allSquare}.`;
-          summaryP.appendChild(lineA);
+          summaryDiv.appendChild(lineA);
 
           const lineB = document.createElement('p');
           lineB.innerText = `${teams[1]?.name || 'Team B'} is up in ${summary.bUp}, down in ${summary.aUp}, all square in ${summary.allSquare}.`;
-          summaryP.appendChild(lineB);
+          summaryDiv.appendChild(lineB);
         } else {
-          summaryP.innerText = 'All matches concluded for this day.';
+          summaryDiv.innerText = 'All matches concluded for this day.';
         }
 
-        dayView.appendChild(summaryP);
+        dayView.appendChild(summaryDiv);
 
-        // Filter matches for this day
+        // Matches for this day
         const dayMatches = matches
-          .map((match, idx) => ({ ...match, idx }))
+          .map((m, idx) => ({ ...m, idx }))
           .filter((m) => m.dayNumber === day.dayNumber);
 
         if (dayMatches.length === 0) {
@@ -207,16 +268,16 @@
             const matchContainer = document.createElement('div');
             matchContainer.classList.add('match-container');
 
-            // Use classes for deeper red/blue or draw
+            // Mark completed matches with color classes
             if (matchObj.winner === 'A') {
-              matchContainer.classList.add('a-winner'); // dark red
+              matchContainer.classList.add('a-winner');
             } else if (matchObj.winner === 'B') {
-              matchContainer.classList.add('b-winner'); // dark navy
+              matchContainer.classList.add('b-winner');
             } else if (matchObj.winner === 'draw') {
-              matchContainer.classList.add('draw-winner'); 
+              matchContainer.classList.add('draw-winner');
             }
 
-            // Title
+            // Match Title
             const matchTitle = document.createElement('h3');
             const playerALabel = Array.isArray(matchObj.playerA)
               ? matchObj.playerA.join(', ')
@@ -242,10 +303,10 @@
               const holesPlayed = matchObj.holesPlayed;
               const holesRemaining = 18 - holesPlayed;
               if (up > 0) {
-                statusP.innerText = 
+                statusP.innerText =
                   `${playerALabel} is ${up} up with ${holesRemaining} to play.`;
               } else if (up < 0) {
-                statusP.innerText = 
+                statusP.innerText =
                   `${playerBLabel} is ${Math.abs(up)} up with ${holesRemaining} to play.`;
               } else {
                 statusP.innerText = `All square, ${holesRemaining} to play.`;
@@ -260,12 +321,12 @@
             const currentHoleIndex = matchHoleIndices[matchObj.idx];
             const holeResult = matchObj.holes[currentHoleIndex];
 
-            // Hole number
+            // Hole number label
             const holeLabel = document.createElement('p');
             holeLabel.innerText = `Hole ${currentHoleIndex + 1}`;
             holeDiv.appendChild(holeLabel);
 
-            // .current-hole-buttons on one row
+            // A/H/B row
             const buttonsDiv = document.createElement('div');
             buttonsDiv.classList.add('current-hole-buttons');
 
@@ -307,8 +368,9 @@
             prevBtn.innerText = '← Prev Hole';
             prevBtn.disabled = (currentHoleIndex === 0);
             prevBtn.onclick = () => {
-              matchHoleIndices[matchObj.idx] = Math.max(0, currentHoleIndex - 1);
-              renderDayViews();
+              const newIndex = Math.max(0, currentHoleIndex - 1);
+              // Use setCurrentHoleIndex to store in localStorage
+              setCurrentHoleIndex(matchObj.idx, newIndex);
             };
             navDiv.appendChild(prevBtn);
 
@@ -316,41 +378,19 @@
             nextBtn.innerText = 'Next Hole →';
             nextBtn.disabled = (currentHoleIndex === 17);
             nextBtn.onclick = () => {
-              matchHoleIndices[matchObj.idx] = Math.min(17, currentHoleIndex + 1);
-              renderDayViews();
+              const newIndex = Math.min(17, currentHoleIndex + 1);
+              setCurrentHoleIndex(matchObj.idx, newIndex);
             };
             navDiv.appendChild(nextBtn);
 
             matchContainer.appendChild(navDiv);
+
             dayView.appendChild(matchContainer);
           });
         }
 
         container.appendChild(dayView);
       });
-    }
-
-    // Summarize incomplete matches
-    function computeDayUpDownSquare(dayNumber) {
-      const dayMatches = matches.filter((m) => m.dayNumber === dayNumber && !m.winner);
-      let aUp = 0, bUp = 0, allSquare = 0;
-
-      dayMatches.forEach((m) => {
-        if (m.holesUp > 0) {
-          aUp++;
-        } else if (m.holesUp < 0) {
-          bUp++;
-        } else {
-          allSquare++;
-        }
-      });
-
-      return {
-        aUp,
-        bUp,
-        allSquare,
-        totalIncomplete: dayMatches.length
-      };
     }
   </script>
 </body>
