@@ -47,10 +47,10 @@
     let days = [];
     let pointsNeededToWin = 0;
 
-    // We'll store the hole index for each match in this array
-    let matchHoleIndices = [];
+    // We no longer store hole indices locally in an array.
+    // Instead, each match on the server has match.currentHoleIndex.
 
-    // Active day can also be remembered in localStorage
+    // We still remember which day is active in localStorage
     let activeDayNumber = parseInt(localStorage.getItem('activeDayNumber') || '1', 10);
 
     const socket = io();
@@ -59,32 +59,44 @@
       console.log('Connected to server');
     });
 
-    // Helper function to set the hole index for a particular match
-    // and also save the entire array to localStorage.
-    function setCurrentHoleIndex(matchIndex, newIndex) {
-      matchHoleIndices[matchIndex] = newIndex;
-      localStorage.setItem('matchHoleIndices', JSON.stringify(matchHoleIndices));
-      renderDayViews(); 
-    }
-
-    // Listen for ntpWinnerUpdated from the server 
-    // (when someone picks nearest to the pin winner)
+    // ==============================
+    // Sockets for NTP, scoreboard, etc.
+    // ==============================
     socket.on('ntpWinnerUpdated', (data) => {
       // data = { dayNumber, winner: 'A'|'B'|null }
       const dayObj = days.find((d) => d.dayNumber === data.dayNumber);
       if (dayObj) {
         dayObj.nearestToPinWinner = data.winner;
       }
-      // Recompute scoreboard
       renderScoreboard();
       renderDayViews();
     });
 
+    socket.on('matchDataUpdated', (data) => {
+      const { matchIndex, match } = data;
+      matches[matchIndex] = match;
+      renderScoreboard();
+      renderDayViews();
+    });
+
+    // ==============================
+    // NEW: navHoleUpdated => a user changed the hole index for a match
+    // ==============================
+    socket.on('navHoleUpdated', (data) => {
+      // data = { matchIndex, newHoleIndex }
+      const { matchIndex, newHoleIndex } = data;
+      // Update that match’s currentHoleIndex
+      matches[matchIndex].currentHoleIndex = newHoleIndex;
+      renderDayViews();
+    });
+
+    // ==============================
     // initData => { cupName, teams, matches, days, pointsNeededToWin }
+    // ==============================
     socket.on('initData', (initData) => {
       cupName = initData.cupName || 'My Ryder Cup';
       teams = initData.teams;
-      matches = initData.matches;
+      matches = initData.matches;  // each match may have .currentHoleIndex from the server
       days = initData.days;
       pointsNeededToWin = initData.pointsNeededToWin || 0;
 
@@ -96,42 +108,16 @@
         activeDayNumber = days[days.length - 1]?.dayNumber || 1;
       }
 
-      // Set cup name in the header
       document.getElementById('cupNameHeader').innerText = cupName + ' Live Scoring';
-
-      // Load or initialize matchHoleIndices from localStorage
-      const stored = localStorage.getItem('matchHoleIndices');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          // Only apply if length matches number of matches
-          if (Array.isArray(parsed) && parsed.length === matches.length) {
-            matchHoleIndices = parsed;
-          } else {
-            matchHoleIndices = matches.map(() => 0);
-          }
-        } catch (err) {
-          console.error('Error parsing stored matchHoleIndices:', err);
-          matchHoleIndices = matches.map(() => 0);
-        }
-      } else {
-        matchHoleIndices = matches.map(() => 0);
-      }
 
       renderScoreboard();
       renderTabs();
       renderDayViews();
     });
 
-    // When a match is updated (someone clicked A/H/B)
-    socket.on('matchDataUpdated', (data) => {
-      const { matchIndex, match } = data;
-      matches[matchIndex] = match;
-      renderScoreboard();
-      renderDayViews();
-    });
-
-    // Render scoreboard (Team points, winner announcement, etc.)
+    // ==============================
+    // Scoreboard
+    // ==============================
     function renderScoreboard() {
       let team1Score = 0;
       let team2Score = 0;
@@ -148,10 +134,9 @@
         }
       });
 
-      // Tally Nearest to the Pin half-points for each day
+      // Tally Nearest to the Pin half-points
       days.forEach((day) => {
         if (day.nearestToPin && day.nearestToPinWinner) {
-          // If day has NTP and a winner, +0.5 
           if (day.nearestToPinWinner === 'A') {
             team1Score += 0.5;
           } else if (day.nearestToPinWinner === 'B') {
@@ -180,7 +165,9 @@
       }
     }
 
-    // Render day tabs (Day 1, Day 2, etc.)
+    // ==============================
+    // Day Tabs
+    // ==============================
     function renderTabs() {
       const dayTabsDiv = document.getElementById('dayTabs');
       dayTabsDiv.innerHTML = '';
@@ -245,7 +232,9 @@
       };
     }
 
-    // Render day-by-day matches + NTP logic
+    // ==============================
+    // renderDayViews
+    // ==============================
     function renderDayViews() {
       const container = document.getElementById('dayViewsContainer');
       container.innerHTML = '';
@@ -253,8 +242,6 @@
       days.forEach((day) => {
         const dayView = document.createElement('div');
         dayView.classList.add('day-section');
-
-        // Show or hide based on activeDayNumber
         dayView.style.display = (day.dayNumber === activeDayNumber) ? 'block' : 'none';
 
         // Title
@@ -262,7 +249,7 @@
         dayHeader.innerText = `Day ${day.dayNumber} - ${day.format}`;
         dayView.appendChild(dayHeader);
 
-        // Show NTP UI if nearestToPin is true
+        // If nearestToPin is true => show a small NTP UI
         if (day.nearestToPin) {
           const ntpDiv = document.createElement('div');
           ntpDiv.style.margin = '10px 0';
@@ -293,7 +280,7 @@
           ntpDiv.appendChild(btnNone);
 
           const currentWinnerP = document.createElement('p');
-          const currentWinner = day.nearestToPinWinner; // 'A' | 'B' | null
+          const currentWinner = day.nearestToPinWinner;
           if (!currentWinner) {
             currentWinnerP.innerText = 'No winner selected yet.';
           } else {
@@ -307,7 +294,7 @@
         }
 
         // Summary of incomplete matches
-        const summaryDiv = document.createElement('div'); 
+        const summaryDiv = document.createElement('div');
         const summary = computeDayUpDownSquare(day.dayNumber);
 
         if (summary.totalIncomplete > 0) {
@@ -321,10 +308,9 @@
         } else {
           summaryDiv.innerText = 'All matches concluded for this day.';
         }
-
         dayView.appendChild(summaryDiv);
 
-        // Matches for this day
+        // day matches
         const dayMatches = matches
           .map((m, idx) => ({ ...m, idx }))
           .filter((m) => m.dayNumber === day.dayNumber);
@@ -338,7 +324,7 @@
             const matchContainer = document.createElement('div');
             matchContainer.classList.add('match-container');
 
-            // Mark completed matches with color classes
+            // color code if completed
             if (matchObj.winner === 'A') {
               matchContainer.classList.add('a-winner');
             } else if (matchObj.winner === 'B') {
@@ -384,53 +370,64 @@
             }
             matchContainer.appendChild(statusP);
 
-            // Hole container (hole number + row of A/H/B)
+            // Hole container
             const holeDiv = document.createElement('div');
             holeDiv.classList.add('current-hole');
 
-            const currentHoleIndex = matchHoleIndices[matchObj.idx];
+            // Instead of local array, we read from matchObj.currentHoleIndex
+            // fallback to 0 if not defined
+            const currentHoleIndex = matchObj.currentHoleIndex || 0;
             const holeResult = matchObj.holes[currentHoleIndex];
 
-            // Hole number label
+            // Hole label
             const holeLabel = document.createElement('p');
             holeLabel.innerText = `Hole ${currentHoleIndex + 1}`;
             holeDiv.appendChild(holeLabel);
 
-            // A/H/B row
+            // A/H/B buttons
             const buttonsDiv = document.createElement('div');
             buttonsDiv.classList.add('current-hole-buttons');
 
-            // A
             const btnA = document.createElement('button');
             btnA.innerText = 'A';
             if (holeResult === 'A') btnA.classList.add('selected');
             btnA.onclick = () => {
-              socket.emit('holeUpdate', { matchIndex: matchObj.idx, holeIndex: currentHoleIndex, result: 'A' });
+              socket.emit('holeUpdate', {
+                matchIndex: matchObj.idx,
+                holeIndex: currentHoleIndex,
+                result: 'A'
+              });
             };
             buttonsDiv.appendChild(btnA);
 
-            // H
             const btnH = document.createElement('button');
             btnH.innerText = 'H';
             if (holeResult === 'H') btnH.classList.add('selected');
             btnH.onclick = () => {
-              socket.emit('holeUpdate', { matchIndex: matchObj.idx, holeIndex: currentHoleIndex, result: 'H' });
+              socket.emit('holeUpdate', {
+                matchIndex: matchObj.idx,
+                holeIndex: currentHoleIndex,
+                result: 'H'
+              });
             };
             buttonsDiv.appendChild(btnH);
 
-            // B
             const btnB = document.createElement('button');
             btnB.innerText = 'B';
             if (holeResult === 'B') btnB.classList.add('selected');
             btnB.onclick = () => {
-              socket.emit('holeUpdate', { matchIndex: matchObj.idx, holeIndex: currentHoleIndex, result: 'B' });
+              socket.emit('holeUpdate', {
+                matchIndex: matchObj.idx,
+                holeIndex: currentHoleIndex,
+                result: 'B'
+              });
             };
             buttonsDiv.appendChild(btnB);
 
             holeDiv.appendChild(buttonsDiv);
             matchContainer.appendChild(holeDiv);
 
-            // Navigation row for previous/next hole
+            // Prev/Next nav
             const navDiv = document.createElement('div');
             navDiv.classList.add('hole-nav');
 
@@ -439,7 +436,8 @@
             prevBtn.disabled = (currentHoleIndex === 0);
             prevBtn.onclick = () => {
               const newIndex = Math.max(0, currentHoleIndex - 1);
-              setCurrentHoleIndex(matchObj.idx, newIndex);
+              // Instead of local set, we notify server
+              socket.emit('navHoleUpdate', { matchIndex: matchObj.idx, newHoleIndex: newIndex });
             };
             navDiv.appendChild(prevBtn);
 
@@ -448,7 +446,7 @@
             nextBtn.disabled = (currentHoleIndex === 17);
             nextBtn.onclick = () => {
               const newIndex = Math.min(17, currentHoleIndex + 1);
-              setCurrentHoleIndex(matchObj.idx, newIndex);
+              socket.emit('navHoleUpdate', { matchIndex: matchObj.idx, newHoleIndex: newIndex });
             };
             navDiv.appendChild(nextBtn);
 

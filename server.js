@@ -44,6 +44,9 @@ let tournamentData = {
     holesUp: 0,
     holesPlayed: 0,
     winner: null|'A'|'B'|'draw'
+
+    // NEW: We'll also store match.currentHoleIndex if you want 
+    //      the server to track the "currently viewed" hole
   }
 */
 
@@ -65,9 +68,9 @@ app.post('/api/setup', (req, res) => {
     {
       teams: [ { name, players }, { name, players } ],
       days: [
-        { 
-          dayNumber, 
-          format, 
+        {
+          dayNumber,
+          format,
           matches: [ { playerA, playerB }, ... ],
           nearestToPin: true|false,
           nearestToPinWinner: null
@@ -92,35 +95,28 @@ app.post('/api/setup', (req, res) => {
 
     if (existingDayIndex === -1) {
       // This day doesn't exist yet; add it
-      // ===========================
-      // NEW: store nearestToPin, nearestToPinWinner as well
-      // ===========================
       tournamentData.days.push({
         dayNumber: newDay.dayNumber,
         format: newDay.format,
         matches: newDay.matches,
-        nearestToPin: newDay.nearestToPin || false,      // NEW
-        nearestToPinWinner: newDay.nearestToPinWinner || null  // NEW
+        nearestToPin: newDay.nearestToPin || false,
+        nearestToPinWinner: newDay.nearestToPinWinner || null
       });
     } else {
       // This day already exists
       const existingDay = tournamentData.days[existingDayIndex];
 
-      // 1) Update format
+      // Update format
       existingDay.format = newDay.format;
 
-      // 2) Remove matches that are no longer in newDay
+      // Remove old matches that are not in newDay
       existingDay.matches = existingDay.matches.filter((oldMatch) => {
         return (
-          findMatchingPairIndex(
-            newDay.matches,
-            oldMatch.playerA,
-            oldMatch.playerB
-          ) !== -1
+          findMatchingPairIndex(newDay.matches, oldMatch.playerA, oldMatch.playerB) !== -1
         );
       });
 
-      // 3) Add matches that are new
+      // Add any new matches
       newDay.matches.forEach((m) => {
         const existingMatchIndex = findMatchingPairIndex(
           existingDay.matches,
@@ -128,15 +124,10 @@ app.post('/api/setup', (req, res) => {
           m.playerB
         );
         if (existingMatchIndex === -1) {
-          // add new match
           existingDay.matches.push(m);
         }
-        // else if found, leave it (preserve hole data)
       });
 
-      // ===========================
-      // NEW: update nearestToPin, nearestToPinWinner
-      // ===========================
       existingDay.nearestToPin = newDay.nearestToPin || false;
       existingDay.nearestToPinWinner = newDay.nearestToPinWinner || null;
     }
@@ -145,13 +136,15 @@ app.post('/api/setup', (req, res) => {
   // 3) Rebuild the flattened "matches" array from tournamentData.days
   rebuildMatches();
 
-  // 4) Calculate totalPoints & pointsNeededToWin
-  let totalMatches = 0;
+  // 4) Calculate totalPoints & pointsNeededToWin (including NTP 0.5 pts)
+  let totalPoints = 0;
   tournamentData.days.forEach((day) => {
-    totalMatches += day.matches.length;
+    const dayPoints = day.matches.length;
+    const ntpPoints = day.nearestToPin ? 0.5 : 0; // if NTP, +0.5
+    totalPoints += (dayPoints + ntpPoints);
   });
-  tournamentData.totalPoints = totalMatches;
-  tournamentData.pointsNeededToWin = Math.floor(totalMatches / 2) + 1;
+  tournamentData.totalPoints = totalPoints;
+  tournamentData.pointsNeededToWin = Math.floor(totalPoints / 2) + 1;
 
   return res.json({
     success: true,
@@ -192,7 +185,7 @@ function rebuildMatches() {
       );
 
       if (existingMatch) {
-        // Keep existing hole data
+        // Keep existing hole data, winner, etc.
         newMatches.push(existingMatch);
       } else {
         // Create new match entry
@@ -204,7 +197,9 @@ function rebuildMatches() {
           holes: Array.from({ length: 18 }, () => null),
           holesUp: 0,
           holesPlayed: 0,
-          winner: null
+          winner: null,
+          // Optionally track currentHoleIndex server side:
+          currentHoleIndex: 0
         });
       }
     });
@@ -223,22 +218,21 @@ app.get('/api/tournament', (req, res) => {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Send initial data, including cupName
+  // Send initial data
   socket.emit('initData', {
-    cupName: tournamentData.cupName,  // <--- We send cupName
+    cupName: tournamentData.cupName,
     teams: tournamentData.teams,
     matches: tournamentData.matches,
-    days: tournamentData.days,        // includes nearestToPin, nearestToPinWinner
+    days: tournamentData.days,
     pointsNeededToWin: tournamentData.pointsNeededToWin
   });
 
-  // Hole update
+  // Hole scoring update (A/H/B)
   socket.on('holeUpdate', (update) => {
     const { matchIndex, holeIndex, result } = update;
     const match = tournamentData.matches[matchIndex];
     if (!match) return;
 
-    // Update the hole
     match.holes[holeIndex] = result;
     recalcMatchState(match);
 
@@ -246,29 +240,38 @@ io.on('connection', (socket) => {
     io.emit('matchDataUpdated', { matchIndex, match });
   });
 
+  // ===========================
+  // NEW: navHoleUpdate => sync hole navigation
+  // ===========================
+  socket.on('navHoleUpdate', (data) => {
+    const { matchIndex, newHoleIndex } = data;
+    const match = tournamentData.matches[matchIndex];
+    if (!match) return;
+
+    // Save the current hole in the server object
+    match.currentHoleIndex = newHoleIndex;
+
+    // Broadcast to all
+    io.emit('navHoleUpdated', { matchIndex, newHoleIndex });
+  });
+
   // Listen for nearestToPin update
   socket.on('ntpUpdate', (data) => {
     /*
       data: {
         dayNumber: 2,
-        winner: 'A' or 'B' or null
+        winner: 'A'|'B'|null
       }
     */
     const { dayNumber, winner } = data;
-
-    // find the day
     const dayObj = tournamentData.days.find((d) => d.dayNumber === dayNumber);
     if (dayObj && dayObj.nearestToPin) {
-      // store the winner
       if (winner === 'A' || winner === 'B') {
         dayObj.nearestToPinWinner = winner;
       } else {
-        // unselect
         dayObj.nearestToPinWinner = null;
       }
     }
-
-    // Then broadcast or call a function to recalc scoreboard if needed
     io.emit('ntpWinnerUpdated', {
       dayNumber,
       winner: dayObj?.nearestToPinWinner || null
