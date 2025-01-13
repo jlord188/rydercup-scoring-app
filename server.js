@@ -139,12 +139,15 @@ app.post('/api/setup', (req, res) => {
   // 4) Calculate totalPoints & pointsNeededToWin (including NTP 0.5 pts)
   let totalPoints = 0;
   tournamentData.days.forEach((day) => {
-    const dayPoints = day.matches.length;
-    const ntpPoints = day.nearestToPin ? 0.5 : 0; // if NTP, +0.5
+    const dayPoints = day.matches.length;  
+    const ntpPoints = day.nearestToPin ? 0.5 : 0;  // +0.5 if nearestToPin
     totalPoints += (dayPoints + ntpPoints);
   });
   tournamentData.totalPoints = totalPoints;
-  tournamentData.pointsNeededToWin = Math.floor(totalPoints / 2) + 1;
+  
+  // Instead of Math.floor(...) + 1, do "half plus 0.5" 
+  // Example: if totalPoints = 4 => 2 + 0.5 => 2.5 needed to win, not 3
+  tournamentData.pointsNeededToWin = (totalPoints / 2) + 0.5;
 
   return res.json({
     success: true,
