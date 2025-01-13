@@ -29,7 +29,9 @@ let tournamentData = {
     matches: [
       { playerA: ["Alice","Bob"], playerB: ["Charlie","Dave"] },
       ...
-    ]
+    ],
+    nearestToPin: true|false,
+    nearestToPinWinner: 'A'|'B'|null
   }
 
   In matches[], we store more detail:
@@ -63,7 +65,13 @@ app.post('/api/setup', (req, res) => {
     {
       teams: [ { name, players }, { name, players } ],
       days: [
-        { dayNumber, format, matches: [ { playerA, playerB }, ... ] },
+        { 
+          dayNumber, 
+          format, 
+          matches: [ { playerA, playerB }, ... ],
+          nearestToPin: true|false,
+          nearestToPinWinner: null
+        },
         ...
       ]
     }
@@ -71,9 +79,7 @@ app.post('/api/setup', (req, res) => {
   const newTeams = teams || [];
   const newDays = days || [];
 
-  // 1) Merge teams (overwrite or keep as is, depending on your preference)
-  //    For simplicity, we'll just overwrite the entire "teams" array if provided,
-  //    because typically you won't be partially updating team rosters mid-tournament.
+  // 1) Merge teams
   if (newTeams.length > 0) {
     tournamentData.teams = newTeams;
   }
@@ -86,41 +92,53 @@ app.post('/api/setup', (req, res) => {
 
     if (existingDayIndex === -1) {
       // This day doesn't exist yet; add it
+      // ===========================
+      // NEW: store nearestToPin, nearestToPinWinner as well
+      // ===========================
       tournamentData.days.push({
         dayNumber: newDay.dayNumber,
         format: newDay.format,
-        matches: newDay.matches
+        matches: newDay.matches,
+        nearestToPin: newDay.nearestToPin || false,      // NEW
+        nearestToPinWinner: newDay.nearestToPinWinner || null  // NEW
       });
     } else {
       // This day already exists
-      // 1) Update format
-      tournamentData.days[existingDayIndex].format = newDay.format;
+      const existingDay = tournamentData.days[existingDayIndex];
 
-      // 2) Remove matches that are no longer in the newDay
-      tournamentData.days[existingDayIndex].matches =
-        tournamentData.days[existingDayIndex].matches.filter((oldMatch) => {
-          return (
-            findMatchingPairIndex(
-              newDay.matches,
-              oldMatch.playerA,
-              oldMatch.playerB
-            ) !== -1
-          );
-        });
+      // 1) Update format
+      existingDay.format = newDay.format;
+
+      // 2) Remove matches that are no longer in newDay
+      existingDay.matches = existingDay.matches.filter((oldMatch) => {
+        return (
+          findMatchingPairIndex(
+            newDay.matches,
+            oldMatch.playerA,
+            oldMatch.playerB
+          ) !== -1
+        );
+      });
 
       // 3) Add matches that are new
       newDay.matches.forEach((m) => {
         const existingMatchIndex = findMatchingPairIndex(
-          tournamentData.days[existingDayIndex].matches,
+          existingDay.matches,
           m.playerA,
           m.playerB
         );
         if (existingMatchIndex === -1) {
           // add new match
-          tournamentData.days[existingDayIndex].matches.push(m);
+          existingDay.matches.push(m);
         }
         // else if found, leave it (preserve hole data)
       });
+
+      // ===========================
+      // NEW: update nearestToPin, nearestToPinWinner
+      // ===========================
+      existingDay.nearestToPin = newDay.nearestToPin || false;
+      existingDay.nearestToPinWinner = newDay.nearestToPinWinner || null;
     }
   });
 
@@ -207,13 +225,14 @@ io.on('connection', (socket) => {
 
   // Send initial data, including cupName
   socket.emit('initData', {
-    cupName: tournamentData.cupName,          // <--- Make sure we send cupName
+    cupName: tournamentData.cupName,  // <--- We send cupName
     teams: tournamentData.teams,
     matches: tournamentData.matches,
-    days: tournamentData.days,
+    days: tournamentData.days,        // includes nearestToPin, nearestToPinWinner
     pointsNeededToWin: tournamentData.pointsNeededToWin
   });
 
+  // Hole update
   socket.on('holeUpdate', (update) => {
     const { matchIndex, holeIndex, result } = update;
     const match = tournamentData.matches[matchIndex];
@@ -225,6 +244,35 @@ io.on('connection', (socket) => {
 
     // Broadcast updated match to all
     io.emit('matchDataUpdated', { matchIndex, match });
+  });
+
+  // Listen for nearestToPin update
+  socket.on('ntpUpdate', (data) => {
+    /*
+      data: {
+        dayNumber: 2,
+        winner: 'A' or 'B' or null
+      }
+    */
+    const { dayNumber, winner } = data;
+
+    // find the day
+    const dayObj = tournamentData.days.find((d) => d.dayNumber === dayNumber);
+    if (dayObj && dayObj.nearestToPin) {
+      // store the winner
+      if (winner === 'A' || winner === 'B') {
+        dayObj.nearestToPinWinner = winner;
+      } else {
+        // unselect
+        dayObj.nearestToPinWinner = null;
+      }
+    }
+
+    // Then broadcast or call a function to recalc scoreboard if needed
+    io.emit('ntpWinnerUpdated', {
+      dayNumber,
+      winner: dayObj?.nearestToPinWinner || null
+    });
   });
 
   socket.on('disconnect', () => {
@@ -273,24 +321,22 @@ function recalcMatchState(match) {
   }
 }
 
+// Reset route
 app.post('/api/reset', (req, res) => {
-    // Wipe out data
-    tournamentData = {
-      cupName: '',
-      teams: [],
-      days: [],
-      matches: [],
-      totalPoints: 0,
-      pointsNeededToWin: 0
-    };
-  
-    // If you're using Socket.IO, you can also broadcast a "reset" event
-    // to clients so they reload or do something special, if desired:
-    io.emit('resetData');
-  
-    return res.json({ success: true, message: 'All data has been reset.' });
-  });
-  
+  // Wipe out data
+  tournamentData = {
+    cupName: '',
+    teams: [],
+    days: [],
+    matches: [],
+    totalPoints: 0,
+    pointsNeededToWin: 0
+  };
+
+  io.emit('resetData');
+  return res.json({ success: true, message: 'All data has been reset.' });
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

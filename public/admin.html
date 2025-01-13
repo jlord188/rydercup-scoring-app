@@ -56,11 +56,11 @@
       <button class="save-setup" type="submit">Save Setup</button>
     </form>
 
+    <!-- RESET BUTTON / RESULT -->
     <button id="resetButton" type="button" style="background-color: #c00; margin-top: 20px;">
-        Reset All Data
-      </button>
-  
-      <div id="resetResult"></div>
+      Reset All Data
+    </button>
+    <div id="resetResult"></div>
 
     <div id="setupResult"></div>
   </div>
@@ -70,6 +70,8 @@
     const generateDaysBtn = document.getElementById('generateDaysBtn');
     const setupForm = document.getElementById('setupForm');
     const setupResult = document.getElementById('setupResult');
+    const resetButton = document.getElementById('resetButton');
+    const resetResult = document.getElementById('resetResult');
 
     generateDaysBtn.addEventListener('click', () => {
       daysContainer.innerHTML = '';
@@ -93,7 +95,16 @@
         formatLabel.appendChild(formatInput);
         dayDiv.appendChild(formatLabel);
 
-        // Row for number of matches
+        // Nearest to the Pin checkbox
+        const ntpLabel = document.createElement('label');
+        ntpLabel.innerText = 'Nearest to the Pin?';
+        const ntpCheckbox = document.createElement('input');
+        ntpCheckbox.type = 'checkbox';
+        ntpCheckbox.id = `dayNtp-${i}`;
+        ntpLabel.appendChild(ntpCheckbox);
+        dayDiv.appendChild(ntpLabel);
+
+        // Number of matches row
         const matchRow = document.createElement('div');
         matchRow.classList.add('row');
 
@@ -181,8 +192,10 @@
       const daysData = [];
       for (let i = 1; i <= numDays; i++) {
         const formatVal = document.getElementById(`dayFormat-${i}`).value || 'Unknown Format';
+        const ntpVal = document.getElementById(`dayNtp-${i}`).checked; // whether day has NTP
         const matchNum = parseInt(document.getElementById(`dayMatchNum-${i}`).value, 10);
 
+        // Build matches array
         const matchesArr = [];
         for (let m = 1; m <= matchNum; m++) {
           const aVal = document.getElementById(`day${i}-match${m}-A`).value;
@@ -193,10 +206,14 @@
 
           matchesArr.push({ playerA, playerB });
         }
+
         daysData.push({
           dayNumber: i,
           format: formatVal,
-          matches: matchesArr
+          matches: matchesArr,
+          // If 'nearestToPin' is true, we can store nearestToPinWinner = null for now
+          nearestToPin: ntpVal,
+          nearestToPinWinner: null
         });
       }
 
@@ -224,19 +241,13 @@
       }
     });
 
-        // The "Reset All Data" button
-        const resetButton = document.getElementById('resetButton');
-    const resetResult = document.getElementById('resetResult');
-
+    // RESET ALL DATA
     resetButton.addEventListener('click', async () => {
-      if (!confirm('Are you sure you want to reset ALL data? This cannot be undone.')) {
-        return; // user canceled
+      if (!confirm('Are you sure you want to reset ALL data?')) {
+        return;
       }
-
       try {
-        const resp = await fetch('/api/reset', {
-          method: 'POST'
-        });
+        const resp = await fetch('/api/reset', { method: 'POST' });
         const result = await resp.json();
         if (result.success) {
           resetResult.innerText = 'All data has been reset.';

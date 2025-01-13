@@ -67,6 +67,19 @@
       renderDayViews(); 
     }
 
+    // Listen for ntpWinnerUpdated from the server 
+    // (when someone picks nearest to the pin winner)
+    socket.on('ntpWinnerUpdated', (data) => {
+      // data = { dayNumber, winner: 'A'|'B'|null }
+      const dayObj = days.find((d) => d.dayNumber === data.dayNumber);
+      if (dayObj) {
+        dayObj.nearestToPinWinner = data.winner;
+      }
+      // Recompute scoreboard
+      renderScoreboard();
+      renderDayViews();
+    });
+
     // initData => { cupName, teams, matches, days, pointsNeededToWin }
     socket.on('initData', (initData) => {
       cupName = initData.cupName || 'My Ryder Cup';
@@ -123,6 +136,7 @@
       let team1Score = 0;
       let team2Score = 0;
 
+      // Tally match points
       matches.forEach((m) => {
         if (m.winner === 'A') {
           team1Score += 1;
@@ -131,6 +145,18 @@
         } else if (m.winner === 'draw') {
           team1Score += 0.5;
           team2Score += 0.5;
+        }
+      });
+
+      // Tally Nearest to the Pin half-points for each day
+      days.forEach((day) => {
+        if (day.nearestToPin && day.nearestToPinWinner) {
+          // If day has NTP and a winner, +0.5 
+          if (day.nearestToPinWinner === 'A') {
+            team1Score += 0.5;
+          } else if (day.nearestToPinWinner === 'B') {
+            team2Score += 0.5;
+          }
         }
       });
 
@@ -219,7 +245,7 @@
       };
     }
 
-    // Render day-by-day matches
+    // Render day-by-day matches + NTP logic
     function renderDayViews() {
       const container = document.getElementById('dayViewsContainer');
       container.innerHTML = '';
@@ -235,6 +261,50 @@
         const dayHeader = document.createElement('h2');
         dayHeader.innerText = `Day ${day.dayNumber} - ${day.format}`;
         dayView.appendChild(dayHeader);
+
+        // Show NTP UI if nearestToPin is true
+        if (day.nearestToPin) {
+          const ntpDiv = document.createElement('div');
+          ntpDiv.style.margin = '10px 0';
+
+          const ntpLabel = document.createElement('p');
+          ntpLabel.innerText = 'Nearest to the Pin (0.5 pts):';
+          ntpDiv.appendChild(ntpLabel);
+
+          const btnA = document.createElement('button');
+          btnA.innerText = (teams[0]?.name || 'Team A');
+          btnA.onclick = () => {
+            socket.emit('ntpUpdate', { dayNumber: day.dayNumber, winner: 'A' });
+          };
+          ntpDiv.appendChild(btnA);
+
+          const btnB = document.createElement('button');
+          btnB.innerText = (teams[1]?.name || 'Team B');
+          btnB.onclick = () => {
+            socket.emit('ntpUpdate', { dayNumber: day.dayNumber, winner: 'B' });
+          };
+          ntpDiv.appendChild(btnB);
+
+          const btnNone = document.createElement('button');
+          btnNone.innerText = 'None';
+          btnNone.onclick = () => {
+            socket.emit('ntpUpdate', { dayNumber: day.dayNumber, winner: null });
+          };
+          ntpDiv.appendChild(btnNone);
+
+          const currentWinnerP = document.createElement('p');
+          const currentWinner = day.nearestToPinWinner; // 'A' | 'B' | null
+          if (!currentWinner) {
+            currentWinnerP.innerText = 'No winner selected yet.';
+          } else {
+            currentWinnerP.innerText = `Current Winner: ${
+              currentWinner === 'A' ? (teams[0]?.name || 'Team A') : (teams[1]?.name || 'Team B')
+            }`;
+          }
+          ntpDiv.appendChild(currentWinnerP);
+
+          dayView.appendChild(ntpDiv);
+        }
 
         // Summary of incomplete matches
         const summaryDiv = document.createElement('div'); 
@@ -369,7 +439,6 @@
             prevBtn.disabled = (currentHoleIndex === 0);
             prevBtn.onclick = () => {
               const newIndex = Math.max(0, currentHoleIndex - 1);
-              // Use setCurrentHoleIndex to store in localStorage
               setCurrentHoleIndex(matchObj.idx, newIndex);
             };
             navDiv.appendChild(prevBtn);
