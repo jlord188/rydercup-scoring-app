@@ -1,0 +1,321 @@
+/* Use the Roboto font from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+/* ========== GLOBAL ========== */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #ffffff;  /* Dark background */
+  color: #fff;             /* White text */
+  font-family: 'Roboto';
+  font-size: 16px;
+}
+
+/* A general wrapper to center content and add margin/padding around edges */
+.page-wrapper {
+  max-width: 1200px;
+  margin: 0px auto;  /* 20px top/bottom, auto left/right for centering */
+  padding: 20px;
+  border-radius: 20px;
+}
+
+/* HEADINGS */
+h1, h2, h3, h4, h5, h6 {
+  margin: 10px 0;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  font-family: 'Merriweather';
+}
+
+/* Optional separate class for the main Cup Name header */
+.cupNameHeader {
+  font-weight: 600;
+  color: #000000;
+}
+
+/* PARAGRAPHS */
+p {
+  margin: 10px 0;
+  line-height: 1.4;
+}
+
+/* LINKS (if any) */
+a {
+  color: #fff;
+  text-decoration: none;
+}
+
+/* BUTTONS */
+button {
+  background-color: #333;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  margin-right: 4px;
+  transition: background-color 0.2s ease-in-out;
+  text-align: center;
+}
+
+button:hover {
+  background-color: #444;
+}
+
+button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
+
+button.selected {
+  background-color: #007bff !important; 
+  color: #fff;
+}
+
+/* ========== ADMIN PAGE ========== */
+.admin-container {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #000; 
+}
+
+/* Extra spacing so items don't overlap */
+.admin-container .row,
+.admin-container label,
+.admin-container input,
+.admin-container textarea {
+  margin-bottom: 10px;
+}
+
+/* The form block (Days & Matches) */
+.admin-container form {
+  background-color: #111;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+/* Smaller numeric fields (Number of Days, Number of Matches) */
+input[type="number"] {
+  max-width: 80px;
+}
+
+/* Teams wrapper: 2 columns side by side */
+.teams-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.team-block {
+  flex: 1;
+  min-width: 280px;
+  background-color: #111;
+  border-radius: 8px;
+  border: 1px solid #333;
+  padding: 16px;
+  box-sizing: border-box; /* ensures padding & width work well together */
+}
+
+/* day-block container for each day */
+.day-block {
+  background-color: #111;
+  border-radius: 8px;
+  border: 1px solid #333;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-sizing: border-box;
+}
+
+.day-block h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+/* match-block within each day */
+.match-block {
+  background-color: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 10px 0;
+  box-sizing: border-box;
+}
+
+/* Save Setup button */
+.save-setup {
+  background-color: #444;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 10px;
+  display: inline-block;
+}
+
+.save-setup:hover {
+  background-color: #555;
+}
+
+/* label styling for admin page */
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+/* More padding for text/textarea so text isn't at edge */
+input[type="text"],
+textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 12px 14px; 
+  margin-bottom: 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background-color: #222;
+  color: #fff;
+  box-sizing: border-box;
+}
+
+/* Setup result text */
+#setupResult {
+  margin-top: 12px;
+  font-style: italic;
+  color: #ccc;
+}
+
+/* MOBILE adjustments for the admin page */
+@media (max-width: 600px) {
+  .teams-wrapper {
+    flex-direction: column;
+  }
+  .team-block {
+    margin-bottom: 16px;
+  }
+}
+
+/* ========== LIVE PAGE ========== */
+/* Scoreboard & Headings */
+#scoreboard {
+  background-color: #000000;
+  text-align: center;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 20px;
+}
+
+#scoreboard h2 {
+  margin: 0;
+  padding: 0;
+  font-size: 1.5rem;
+}
+
+/* Winner Announcement */
+#winnerAnnouncement  {
+  text-align: center;
+  font-size: 1.8em;
+  color: rgb(255, 255, 255); 
+  margin-bottom: 20px;
+  font-family: "merriweather";
+}
+
+/* Tabs for each day */
+#dayTabs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 10px 0 20px 0; 
+}
+
+/* Active tab highlight */
+button.active-tab {
+  background-color: #000000;
+  color: #fff;
+}
+
+/* day-section container: center, add padding, text-align center */
+.day-section {
+  margin: 20px auto;
+  max-width: 800px;
+  background-color: #000000;
+  border-radius: 20px;
+  padding: 20px;
+  text-align: center;  
+}
+
+/* Match Container: center text, more margin */
+.match-container {
+  
+  border-radius: 20px;
+  background-color: #222;
+  margin: 20px 0;
+  padding: 20px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* Hole layout: hole number on its own line, then A/H/B on one row */
+.current-hole {
+  display: flex;
+  flex-direction: column; /* stack vertical: hole #, then buttons below */
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Subcontainer for the A/H/B buttons in one row */
+.current-hole-buttons {
+  display: flex;
+  gap: 8px;    /* space between A/H/B */
+}
+
+/* The row for Prev/Next hole under the scoring row */
+.hole-nav {
+  display: flex;
+  justify-content: center; 
+  gap: 10px;
+  margin-top: 16px; 
+}
+
+/* Completed match colors: deeper red / deeper blue / gray for draw */
+.match-container.a-winner {
+  background-color: #7a0404 !important; /* dark red */
+}
+.match-container.b-winner {
+  background-color: #193371 !important; /* dark navy */
+}
+.match-container.draw-winner {
+  background-color: #666 !important; /* darker gray */
+}
+
+/* ========== MOBILE for the live page ========== */
+@media (max-width: 600px) {
+  /* 
+    Make scoreboard text a bit smaller
+    (optional—comment out if you want it bigger)
+  */
+  #scoreboard h2 {
+    font-size: 1.5rem;
+  }
+
+  /* Increase the size of all buttons on the live page (or just specific ones). */
+  .current-hole-buttons button {
+    font-size: 1rem !important;
+    padding: 12px 20px !important;
+  }
+
+  /* 
+    If you want prev/next hole nav also bigger, do this:
+    .hole-nav button {
+      font-size: 1rem !important;
+      padding: 12px 20px !important;
+    }
+  */
+}
