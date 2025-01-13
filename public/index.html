@@ -435,17 +435,17 @@
             prevBtn.innerText = '← Prev Hole';
             prevBtn.disabled = (currentHoleIndex === 0);
             prevBtn.onclick = () => {
-              const newIndex = Math.max(0, currentHoleIndex - 1);
-              // Instead of local set, we notify server
+              const currentIndex = matchObj.currentHoleIndex || 0;
+              const newIndex = Math.max(0, currentIndex - 1);
               socket.emit('navHoleUpdate', { matchIndex: matchObj.idx, newHoleIndex: newIndex });
             };
             navDiv.appendChild(prevBtn);
 
             const nextBtn = document.createElement('button');
             nextBtn.innerText = 'Next Hole →';
-            nextBtn.disabled = (currentHoleIndex === 17);
             nextBtn.onclick = () => {
-              const newIndex = Math.min(17, currentHoleIndex + 1);
+              const currentIndex = matchObj.currentHoleIndex || 0;
+              const newIndex = Math.min(17, currentIndex + 1);
               socket.emit('navHoleUpdate', { matchIndex: matchObj.idx, newHoleIndex: newIndex });
             };
             navDiv.appendChild(nextBtn);

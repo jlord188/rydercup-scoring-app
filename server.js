@@ -244,16 +244,20 @@ io.on('connection', (socket) => {
   // NEW: navHoleUpdate => sync hole navigation
   // ===========================
   socket.on('navHoleUpdate', (data) => {
+    // data = { matchIndex, newHoleIndex }
     const { matchIndex, newHoleIndex } = data;
+    
+    // find the match
     const match = tournamentData.matches[matchIndex];
     if (!match) return;
-
-    // Save the current hole in the server object
+  
+    // store it on the server
     match.currentHoleIndex = newHoleIndex;
-
-    // Broadcast to all
+  
+    // broadcast to all
     io.emit('navHoleUpdated', { matchIndex, newHoleIndex });
   });
+  
 
   // Listen for nearestToPin update
   socket.on('ntpUpdate', (data) => {
